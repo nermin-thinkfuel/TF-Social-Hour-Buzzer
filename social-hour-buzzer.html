@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Social Hour Buzzer 🔔</title>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #080c14;
+    --surface: #0f1623;
+    --surface2: #161e2e;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --gold: #f5b932;
+    --gold-dim: rgba(245,185,50,0.12);
+    --gold-border: rgba(245,185,50,0.3);
+    --red: #e63946;
+    --red-glow: rgba(230,57,70,0.5);
+    --green: #2ec4b6;
+    --text: #e8edf5;
+    --muted: #6b7a96;
+    --mono: 'Space Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  html, body { height: 100%; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 20% 20%, rgba(245,185,50,0.04) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 80% 80%, rgba(46,196,182,0.04) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  .screen { display: none; width: 100%; }
+  .screen.active { display: flex; flex-direction: column; align-items: center; }
+
+  /* ───── CARD ───── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    padding: 36px;
+    width: 100%;
+    max-width: 440px;
+  }
+
+  .card-wide { max-width: 500px; }
+
+  /* ───── TYPOGRAPHY ───── */
+  .title {
+    font-size: 26px; font-weight: 800; letter-spacing: -0.5px;
+    text-align: center; line-height: 1.1;
+  }
+  .subtitle { color: var(--muted); font-size: 14px; text-align: center; margin-top: 6px; }
+  .icon-hero { font-size: 52px; display: block; text-align: center; margin-bottom: 10px; line-height: 1; }
+  .section-label {
+    color: var(--muted); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    margin-bottom: 8px; display: block;
+  }
+  .mono { font-family: var(--mono); }
+
+  /* ───── FORM ELEMENTS ───── */
+  input {
+    width: 100%; background: var(--bg);
+    border: 1px solid var(--border2);
+    border-radius: 10px; padding: 13px 16px;
+    color: var(--text); font-size: 16px; font-family: var(--sans);
+    margin-bottom: 10px; transition: border-color 0.2s;
+  }
+  input:focus { outline: none; border-color: var(--gold); }
+  input[type=number]::-webkit-inner-spin-button { opacity: 0.5; }
+  input.mono-input { font-family: var(--mono); letter-spacing: 0.15em; font-size: 18px; text-transform: uppercase; }
+
+  /* ───── BUTTONS ───── */
+  button {
+    border: none; border-radius: 10px; padding: 13px 20px;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+    width: 100%; margin-bottom: 8px; font-family: var(--sans);
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.4; cursor: default; }
+
+  .btn-gold { background: var(--gold); color: #111; }
+  .btn-teal { background: var(--green); color: #111; }
+  .btn-red { background: var(--red); color: #fff; }
+  .btn-green { background: #1a8a5a; color: #fff; }
+  .btn-purple { background: #5c35e0; color: #fff; }
+  .btn-ghost {
+    background: transparent; border: 1px solid var(--border2);
+    color: var(--muted); width: auto; padding: 8px 16px; font-size: 13px;
+  }
+
+  .btn-row { display: flex; gap: 10px; width: 100%; }
+  .btn-row button { flex: 1; }
+
+  /* ───── DIVIDER ───── */
+  .divider {
+    display: flex; align-items: center; gap: 14px; margin: 20px 0;
+  }
+  .divider::before, .divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+  .divider span { color: var(--muted); font-size: 12px; }
+
+  /* ───── ERROR ───── */
+  .error-box {
+    background: rgba(230,57,70,0.1); border: 1px solid rgba(230,57,70,0.3);
+    border-radius: 10px; padding: 12px 16px; color: #f87171;
+    font-size: 14px; margin-bottom: 14px; display: none;
+  }
+
+  /* ───── HOST HEADER ───── */
+  .host-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 22px; gap: 12px;
+  }
+  .q-label { color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+  .q-counter { font-size: 26px; font-weight: 800; line-height: 1.1; }
+  .badge {
+    border-radius: 20px; padding: 5px 14px;
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+  .badge-gold { background: var(--gold-dim); border: 1px solid var(--gold-border); color: var(--gold); }
+  .badge-teal { background: rgba(46,196,182,0.1); border: 1px solid rgba(46,196,182,0.3); color: var(--green); }
+
+  /* ───── ROOM CODE DISPLAY ───── */
+  .room-code-display {
+    font-family: var(--mono); font-size: 32px; font-weight: 700;
+    color: var(--gold); letter-spacing: 0.25em;
+    background: var(--gold-dim); border: 1px solid var(--gold-border);
+    border-radius: 12px; padding: 10px 20px;
+    text-align: center; margin: 14px 0;
+  }
+  .room-hint { color: var(--muted); font-size: 12px; text-align: center; }
+
+  /* ───── STATUS BOX ───── */
+  .status-box {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 16px; padding: 32px 24px;
+    text-align: center; min-height: 180px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    margin: 16px 0;
+  }
+  .status-icon { font-size: 42px; margin-bottom: 10px; line-height: 1; display: block; }
+  .status-heading { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+  .status-sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+
+  /* ───── SCOREBOARD ───── */
+  .score-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 0; border-bottom: 1px solid var(--border);
+  }
+  .score-row:last-child { border-bottom: none; }
+  .score-rank { width: 28px; color: var(--muted); font-size: 14px; text-align: center; }
+  .score-name { flex: 1; font-size: 14px; }
+  .score-pts { color: var(--gold); font-weight: 700; font-family: var(--mono); font-size: 14px; }
+
+  /* ───── PLAYER PAGE ───── */
+  .player-page {
+    min-height: 100vh; width: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; padding: 24px 20px;
+    justify-content: space-between;
+  }
+  .player-inner { width: 100%; max-width: 380px; flex: 1; display: flex; flex-direction: column; }
+
+  .player-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px;
+  }
+  .player-name-display { color: var(--gold); font-size: 18px; font-weight: 700; }
+  .player-q-display { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .my-score {
+    font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--gold);
+    background: var(--gold-dim); border: 1px solid var(--gold-border);
+    border-radius: 16px; padding: 8px 18px;
+  }
+
+  .player-status {
+    text-align: center; min-height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 500; margin-bottom: 8px;
+  }
+
+  /* ───── BUZZ BUTTON ───── */
+  .buzz-wrap {
+    flex: 1; display: flex; align-items: center;
+    justify-content: center; padding: 16px 0;
+  }
+
+  .buzz-btn {
+    width: 210px; height: 210px; border-radius: 50%;
+    border: none; font-family: var(--mono); font-weight: 700;
+    cursor: pointer; transition: transform 0.12s, box-shadow 0.2s;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0; width: 210px; /* override button:100% */
+    position: relative; overflow: hidden;
+  }
+
+  .buzz-btn::after {
+    content: '';
+    position: absolute; inset: 0; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.18), transparent 60%);
+    pointer-events: none;
+  }
+
+  .buzz-btn.state-ready {
+    background: var(--red);
+    box-shadow: 0 0 0 8px rgba(230,57,70,0.15), 0 0 40px rgba(230,57,70,0.45);
+    font-size: 30px; letter-spacing: 3px; color: #fff;
+    animation: pulse-red 2s infinite;
+  }
+  .buzz-btn.state-ready:active { transform: scale(0.93); box-shadow: 0 0 0 4px rgba(230,57,70,0.2); }
+  .buzz-btn.state-sent {
+    background: #c07000;
+    box-shadow: 0 0 20px rgba(245,185,50,0.3);
+    font-size: 20px; color: #fff;
+    cursor: default; transform: scale(0.92);
+  }
+  .buzz-btn.state-winner {
+    background: #1a8a5a;
+    box-shadow: 0 0 30px rgba(26,138,90,0.5);
+    font-size: 36px; cursor: default;
+  }
+  .buzz-btn.state-off {
+    background: var(--surface2); cursor: default;
+    transform: scale(0.88); font-size: 28px; color: #2a3448;
+    box-shadow: none;
+  }
+  .buzz-btn.state-you {
+    background: var(--gold);
+    box-shadow: 0 0 30px rgba(245,185,50,0.5);
+    font-size: 24px; font-weight: 800; color: #111;
+    cursor: default;
+  }
+
+  @keyframes pulse-red {
+    0%, 100% { box-shadow: 0 0 0 8px rgba(230,57,70,0.15), 0 0 40px rgba(230,57,70,0.45); }
+    50% { box-shadow: 0 0 0 14px rgba(230,57,70,0.08), 0 0 60px rgba(230,57,70,0.6); }
+  }
+
+  /* ───── PLAYER SCOREBOARD ───── */
+  .player-score-panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 16px; margin-top: 8px;
+  }
+
+  /* ───── RESULTS ───── */
+  .podium-card {
+    display: flex; align-items: center; gap: 14px;
+    border-radius: 14px; padding: 14px 18px; margin-bottom: 10px;
+    border: 1px solid var(--border);
+  }
+  .podium-card.first {
+    background: rgba(245,185,50,0.08);
+    border-color: var(--gold-border);
+    transform: scale(1.02);
+  }
+  .podium-medal { font-size: 28px; line-height: 1; }
+  .podium-name { flex: 1; font-size: 16px; font-weight: 600; }
+  .podium-score { font-family: var(--mono); color: var(--gold); font-size: 22px; font-weight: 700; }
+
+  /* ───── CONNECTING OVERLAY ───── */
+  .connecting {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px; z-index: 100;
+    display: none;
+  }
+  .connecting.show { display: flex; }
+  .spinner {
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 3px solid var(--border2);
+    border-top-color: var(--gold);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ───── TOAST ───── */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 10px; padding: 12px 20px; font-size: 14px;
+    transition: transform 0.3s ease; z-index: 200; white-space: nowrap;
+    pointer-events: none;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Buzzer ripple */
+  @keyframes ripple {
+    0% { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(2.5); opacity: 0; }
+  }
+  .ripple-ring {
+    position: absolute; inset: -2px; border-radius: 50%;
+    border: 3px solid var(--red);
+    animation: ripple 0.6s ease-out forwards;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══ CONNECTING OVERLAY ═══ -->
+<div class="connecting" id="connecting">
+  <div class="spinner"></div>
+  <p id="connecting-msg" style="color:var(--muted);font-size:14px">Connecting to game server...</p>
+</div>
+
+<!-- ═══ TOAST ═══ -->
+<div class="toast" id="toast"></div>
+
+<!-- ═══════════════════════════════════ -->
+<!--         SCREEN: SETUP             -->
+<!-- ═══════════════════════════════════ -->
+<div class="screen active" id="screen-setup">
+  <div class="card">
+    <span class="icon-hero">🔔</span>
+    <h1 class="title">Social Hour Buzzer</h1>
+    <p class="subtitle" style="margin-bottom:28px">Real-time quiz buzzer for your team</p>
+
+    <div id="setup-error" class="error-box"></div>
+
+    <span class="section-label">Host — Start a new game</span>
+    <input type="number" id="total-q-input" value="10" min="1" max="50" placeholder="Number of questions">
+    <button class="btn-gold" onclick="hostCreate()">👑 &nbsp;Create Game as Host</button>
+
+    <div class="divider"><span>or join as player</span></div>
+
+    <span class="section-label">Player — Join existing game</span>
+    <input id="player-name-input" placeholder="Your name" onkeydown="if(event.key==='Enter')joinGame()">
+    <input id="room-code-input" class="mono-input" placeholder="ROOM CODE" maxlength="4" onkeydown="if(event.key==='Enter')joinGame()">
+    <button class="btn-teal" onclick="joinGame()">🎮 &nbsp;Join Game</button>
+
+    <p style="color:var(--muted);font-size:11px;text-align:center;margin-top:16px;line-height:1.5">
+      Host shares a 4-letter room code · players open this page on their own device
+    </p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ -->
+<!--         SCREEN: HOST              -->
+<!-- ═══════════════════════════════════ -->
+<div class="screen" id="screen-host">
+  <div class="card card-wide">
+    <div class="host-header">
+      <div>
+        <div class="q-label">Question</div>
+        <div class="q-counter" id="host-q-counter">1 / 10</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+        <span class="badge badge-gold">👑 Host</span>
+        <div style="text-align:right">
+          <div style="color:var(--muted);font-size:10px;letter-spacing:.1em;text-transform:uppercase">Room Code</div>
+          <div style="font-family:var(--mono);color:var(--gold);font-weight:700;font-size:22px;letter-spacing:.2em" id="host-room-label">----</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status control area -->
+    <div class="status-box" id="host-status-box">
+      <span class="status-icon">🎯</span>
+      <div class="status-heading">Waiting to start</div>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+      <button class="btn-ghost" onclick="confirmEnd()">End Game</button>
+    </div>
+
+    <span class="section-label" id="host-player-label">Players (0)</span>
+    <div id="host-scoreboard">
+      <p style="color:var(--muted);font-size:13px">Waiting for players to join...</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ -->
+<!--         SCREEN: PLAYER            -->
+<!-- ═══════════════════════════════════ -->
+<div class="screen" id="screen-player" style="padding:0;align-items:stretch;">
+  <div class="player-page">
+    <div class="player-inner">
+      <div class="player-header">
+        <div>
+          <div class="player-name-display" id="my-name-display">—</div>
+          <div class="player-q-display" id="my-q-display">Q 1/10</div>
+        </div>
+        <div class="my-score" id="my-score-display">0 pts</div>
+      </div>
+
+      <div class="player-status" id="player-status-msg">
+        <span style="color:var(--muted)">Waiting for game to start...</span>
+      </div>
+
+      <div class="buzz-wrap">
+        <button id="buzz-btn" class="buzz-btn state-off" onclick="doBuzz()">●</button>
+      </div>
+
+      <div class="player-score-panel">
+        <span class="section-label">Scores</span>
+        <div id="player-scoreboard"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ -->
+<!--         SCREEN: RESULTS           -->
+<!-- ═══════════════════════════════════ -->
+<div class="screen" id="screen-results">
+  <div class="card" style="max-width:420px">
+    <div style="text-align:center;margin-bottom:24px">
+      <span style="font-size:56px;display:block;margin-bottom:8px">🏆</span>
+      <h1 class="title">Game Over!</h1>
+      <p class="subtitle" style="margin-bottom:0">Final Standings</p>
+    </div>
+    <div id="results-list"></div>
+    <button class="btn-gold" id="new-game-btn" style="margin-top:20px;display:none" onclick="newGame()">🔄 &nbsp;New Game (same players)</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//   CONSTANTS & STATE
+// ═══════════════════════════════════════════════════════
+const BROKER = 'wss://broker.hivemq.com:8884/mqtt';
+const MEDALS = ['🥇','🥈','🥉'];
+
+let mqttClient = null;
+let role = null;         // 'host' | 'player'
+let myName = '';
+let roomCode = '';
+let game = null;
+let hasBuzzed = false;
+let pendingBuzz = null;  // queued buzz if sent before state confirmed
+
+// ═══════════════════════════════════════════════════════
+//   UTILS
+// ═══════════════════════════════════════════════════════
+function genCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let c = '';
+  for (let i = 0; i < 4; i++) c += chars[Math.floor(Math.random() * chars.length)];
+  return c;
+}
+
+function topic(sub) {
+  return sub ? `sochour/${roomCode}/${sub}` : `sochour/${roomCode}/state`;
+}
+
+function sorted(players) {
+  return [...(players || [])].sort((a,b) => b.score - a.score);
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+}
+
+function showConnecting(visible, msg) {
+  const el = document.getElementById('connecting');
+  el.classList.toggle('show', visible);
+  if (msg) document.getElementById('connecting-msg').textContent = msg;
+}
+
+function showToast(msg, duration = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), duration);
+}
+
+function showError(msg) {
+  const el = document.getElementById('setup-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// ═══════════════════════════════════════════════════════
+//   MQTT
+// ═══════════════════════════════════════════════════════
+function connectMQTT(onReady) {
+  const clientId = 'sh_' + Math.random().toString(36).substring(2, 10);
+  mqttClient = mqtt.connect(BROKER, {
+    clientId, clean: true, reconnectPeriod: 3000,
+    keepalive: 30, connectTimeout: 8000
+  });
+
+  mqttClient.on('connect', () => {
+    // Subscribe to state always
+    mqttClient.subscribe(topic('state'), { qos: 1 });
+    // Host also listens for buzz and join events
+    if (role === 'host') {
+      mqttClient.subscribe(topic('buzz'), { qos: 1 });
+      mqttClient.subscribe(topic('join'), { qos: 1 });
+    }
+    showConnecting(false);
+    onReady();
+  });
+
+  mqttClient.on('message', (t, msg) => {
+    try {
+      const data = JSON.parse(msg.toString());
+      if (t === topic('state')) handleStateUpdate(data);
+      else if (t === topic('buzz') && role === 'host') handleBuzz(data);
+      else if (t === topic('join') && role === 'host') handleJoinRequest(data);
+    } catch(e) { /* ignore */ }
+  });
+
+  mqttClient.on('error', () => {
+    showConnecting(false);
+    showToast('⚠️ Connection issue — retrying...');
+  });
+}
+
+function publish(data, retain) {
+  if (!mqttClient) return;
+  mqttClient.publish(topic('state'), JSON.stringify(data), { retain: retain !== false, qos: 1 });
+}
+
+// ═══════════════════════════════════════════════════════
+//   HOST ACTIONS
+// ═══════════════════════════════════════════════════════
+function hostCreate() {
+  const totalQ = Math.max(1, parseInt(document.getElementById('total-q-input').value) || 10);
+  roomCode = genCode();
+  role = 'host';
+  myName = 'Host';
+
+  game = {
+    phase: 'lobby',
+    players: [],
+    buzzedBy: null,
+    currentQ: 1,
+    totalQ,
+    disqualified: [],
+    lastWinner: null
+  };
+
+  showConnecting(true, 'Setting up game room...');
+  connectMQTT(() => {
+    publish(game);
+    document.getElementById('host-room-label').textContent = roomCode;
+    document.getElementById('host-q-counter').textContent = `1 / ${totalQ}`;
+    showScreen('host');
+    renderHostStatus();
+    renderHostScoreboard();
+    showToast(`Room code: ${roomCode} — share with players!`, 5000);
+  });
+}
+
+function openBuzzers() {
+  game = { ...game, phase: 'open', buzzedBy: null, disqualified: [], lastWinner: null };
+  publish(game);
+  renderHostStatus();
+}
+
+function markCorrect() {
+  const winner = game.buzzedBy;
+  game = {
+    ...game, phase: 'correct', lastWinner: winner,
+    players: game.players.map(p => p.name === winner ? { ...p, score: p.score + 1 } : p)
+  };
+  publish(game);
+  renderHostStatus();
+  renderHostScoreboard();
+}
+
+function markWrong() {
+  game = {
+    ...game, phase: 'open',
+    buzzedBy: null
+  };
+  publish(game);
+  renderHostStatus();
+}
+
+function nextQuestion() {
+  if (game.currentQ >= game.totalQ) { endGame(); return; }
+  game = {
+    ...game, phase: 'lobby',
+    currentQ: game.currentQ + 1,
+    buzzedBy: null, disqualified: [], lastWinner: null
+  };
+  publish(game);
+  document.getElementById('host-q-counter').textContent = `${game.currentQ} / ${game.totalQ}`;
+  renderHostStatus();
+}
+
+function confirmEnd() {
+  if (confirm('End the game now and show results?')) endGame();
+}
+
+function endGame() {
+  game = { ...game, phase: 'results' };
+  publish(game);
+  renderResults();
+  showScreen('results');
+}
+
+function newGame() {
+  game = {
+    phase: 'lobby', players: game.players.map(p => ({ ...p, score: 0 })),
+    buzzedBy: null, currentQ: 1, totalQ: game.totalQ,
+    disqualified: [], lastWinner: null
+  };
+  publish(game);
+  document.getElementById('host-q-counter').textContent = `1 / ${game.totalQ}`;
+  document.getElementById('new-game-btn').style.display = 'none';
+  showScreen('host');
+  renderHostStatus();
+  renderHostScoreboard();
+}
+
+// ═══════════════════════════════════════════════════════
+//   PLAYER ACTIONS
+// ═══════════════════════════════════════════════════════
+function joinGame() {
+  const name = document.getElementById('player-name-input').value.trim();
+  const code = document.getElementById('room-code-input').value.trim().toUpperCase();
+
+  if (!name) { showError('Please enter your name'); return; }
+  if (code.length < 2) { showError('Please enter the room code from your host'); return; }
+
+  myName = name;
+  roomCode = code;
+  role = 'player';
+
+  document.getElementById('my-name-display').textContent = name;
+
+  showConnecting(true, 'Joining game...');
+  connectMQTT(() => {
+    // Send join request
+    mqttClient.publish(topic('join'), JSON.stringify({ name }), { qos: 1 });
+    showScreen('player');
+    renderPlayerStatus();
+  });
+}
+
+function doBuzz() {
+  if (hasBuzzed) return;
+  if (!game || game.phase !== 'open') return;
+
+  hasBuzzed = true;
+
+  // Add ripple effect
+  const btn = document.getElementById('buzz-btn');
+  const ring = document.createElement('div');
+  ring.className = 'ripple-ring';
+  btn.appendChild(ring);
+  setTimeout(() => ring.remove(), 700);
+
+  mqttClient.publish(topic('buzz'), JSON.stringify({ name: myName, ts: Date.now() }), { qos: 1 });
+  updateBuzzBtn('sent');
+}
+
+// ═══════════════════════════════════════════════════════
+//   EVENT HANDLERS (incoming MQTT)
+// ═══════════════════════════════════════════════════════
+function handleStateUpdate(g) {
+  const prev = game;
+  game = g;
+
+  // Reset buzz state on new question opening or reopening after wrong answer
+  if (!prev || (prev.phase !== 'open' && g.phase === 'open')) hasBuzzed = false;
+  if (prev && prev.currentQ !== g.currentQ) hasBuzzed = false;
+
+  if (g.phase === 'results') {
+    renderResults();
+    showScreen('results');
+    return;
+  }
+
+  if (role === 'host') {
+    document.getElementById('host-q-counter').textContent = `${g.currentQ} / ${g.totalQ}`;
+    renderHostStatus();
+    renderHostScoreboard();
+  } else {
+    renderPlayerStatus();
+    renderPlayerScoreboard();
+  }
+}
+
+function handleBuzz(data) {
+  if (!game || game.phase !== 'open') return;
+  if (game.buzzedBy) return;  // already have a buzzer
+
+  game = { ...game, phase: 'buzzed', buzzedBy: data.name };
+  publish(game);
+  renderHostStatus();
+}
+
+function handleJoinRequest(data) {
+  if (!game) return;
+  if (game.players.find(p => p.name === data.name)) return;  // already joined
+  game = { ...game, players: [...game.players, { name: data.name, score: 0 }] };
+  publish(game);
+  renderHostScoreboard();
+  showToast(`${data.name} joined!`);
+}
+
+// ═══════════════════════════════════════════════════════
+//   RENDER — HOST
+// ═══════════════════════════════════════════════════════
+function renderHostStatus() {
+  if (!game) return;
+  const box = document.getElementById('host-status-box');
+  const phase = game.phase;
+  const disq = (game.disqualified || []).join(', ');
+
+  if (phase === 'lobby') {
+    box.innerHTML = `
+      <span class="status-icon">🎯</span>
+      <div class="status-heading">Question ${game.currentQ}</div>
+      <div class="status-sub">Open the buzzers when you're ready</div>
+      <button class="btn-green" style="width:auto;padding:13px 36px" onclick="openBuzzers()">Open Buzzers 🔔</button>
+    `;
+  } else if (phase === 'open') {
+    box.innerHTML = `
+      <span class="status-icon">⚡</span>
+      <div class="status-heading" style="color:var(--green)">Buzzers Open!</div>
+      <div class="status-sub">Waiting for someone to buzz in...</div>
+    `;
+  } else if (phase === 'buzzed') {
+    box.innerHTML = `
+      <span class="status-icon">🔔</span>
+      <div class="status-heading" style="color:var(--gold)">${game.buzzedBy} buzzed!</div>
+      <div class="status-sub" style="margin-bottom:18px">Is their answer correct?</div>
+      <div class="btn-row">
+        <button class="btn-green" style="padding:12px 0" onclick="markCorrect()">✅ Correct</button>
+        <button class="btn-red" style="padding:12px 0" onclick="markWrong()">❌ Wrong</button>
+      </div>
+    `;
+  } else if (phase === 'correct') {
+    const isLast = game.currentQ >= game.totalQ;
+    box.innerHTML = `
+      <span class="status-icon">🎉</span>
+      <div class="status-heading" style="color:var(--green)">${game.lastWinner} got it! +1</div>
+      <div class="status-sub" style="margin-bottom:18px">Great answer!</div>
+      <button class="${isLast ? 'btn-gold' : 'btn-purple'}" style="width:auto;padding:12px 28px" onclick="nextQuestion()">
+        ${isLast ? '🏆 See Final Results' : '➡️ Next Question'}
+      </button>
+    `;
+  }
+}
+
+function renderHostScoreboard() {
+  if (!game) return;
+  const s = sorted(game.players);
+  document.getElementById('host-player-label').textContent = `Players (${s.length})`;
+
+  const el = document.getElementById('host-scoreboard');
+  if (s.length === 0) {
+    el.innerHTML = `<p style="color:var(--muted);font-size:13px">Waiting for players to join...</p>`;
+    return;
+  }
+
+  el.innerHTML = s.map((p, i) => {
+    const highlighted = game.buzzedBy === p.name;
+    const disq = (game.disqualified || []).includes(p.name);
+    return `
+      <div class="score-row" style="${highlighted ? 'background:rgba(245,185,50,0.06);margin:0 -8px;padding:9px 8px;border-radius:8px;' : ''}">
+        <span class="score-rank">${i < 3 ? MEDALS[i] : i + 1}</span>
+        <span class="score-name" style="color:${highlighted ? 'var(--gold)' : 'var(--text)'}">
+          ${p.name}${disq ? ' <span style="color:#f87171;font-size:11px">✗</span>' : ''}
+        </span>
+        <span class="score-pts">${p.score}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//   RENDER — PLAYER
+// ═══════════════════════════════════════════════════════
+function renderPlayerStatus() {
+  if (!game) return;
+  const phase = game.phase;
+  const isBuzzer = phase === 'buzzed' && game.buzzedBy === myName;
+  const isWinner = phase === 'correct' && game.lastWinner === myName;
+  const canBuzz = phase === 'open' && !hasBuzzed;
+
+  document.getElementById('my-q-display').textContent = `Q ${game.currentQ} / ${game.totalQ}`;
+  const myPts = (game.players.find(p => p.name === myName) || {}).score || 0;
+  document.getElementById('my-score-display').textContent = `${myPts} pts`;
+
+  const msg = document.getElementById('player-status-msg');
+  if (phase === 'lobby')
+    msg.innerHTML = `<span style="color:var(--muted)">⏳ Waiting for next question...</span>`;
+  else if (phase === 'open' && !hasBuzzed)
+    msg.innerHTML = `<span style="color:var(--green);font-size:17px">❗ Buzzers open — hit it!</span>`;
+  else if (phase === 'open' && hasBuzzed)
+    msg.innerHTML = `<span style="color:var(--gold)">⏳ Buzz sent! Waiting...</span>`;
+  else if (isBuzzer)
+    msg.innerHTML = `<span style="color:var(--gold);font-size:17px">🔔 You buzzed — answer now!</span>`;
+  else if (phase === 'buzzed')
+    msg.innerHTML = `<span style="color:var(--muted)">🔔 ${game.buzzedBy} buzzed first!</span>`;
+  else if (isWinner)
+    msg.innerHTML = `<span style="color:var(--green);font-size:17px">🎉 Correct! +1 point!</span>`;
+  else if (phase === 'correct')
+    msg.innerHTML = `<span style="color:var(--muted)">✅ ${game.lastWinner} got it right!</span>`;
+
+  if (canBuzz) updateBuzzBtn('ready');
+  else if (hasBuzzed && phase === 'open') updateBuzzBtn('sent');
+  else if (isBuzzer) updateBuzzBtn('you');
+  else if (isWinner) updateBuzzBtn('winner');
+  else updateBuzzBtn('off');
+
+  renderPlayerScoreboard();
+}
+
+function updateBuzzBtn(state) {
+  const btn = document.getElementById('buzz-btn');
+  btn.className = 'buzz-btn state-' + state;
+  const labels = { ready: 'BUZZ!', sent: 'SENT!', you: 'YOU!', winner: '✓', off: '●' };
+  btn.textContent = labels[state] || '●';
+}
+
+function renderPlayerScoreboard() {
+  if (!game) return;
+  const s = sorted(game.players);
+  document.getElementById('player-scoreboard').innerHTML = s.slice(0, 6).map((p, i) => `
+    <div class="score-row">
+      <span class="score-rank" style="font-size:${i<3?'16px':'13px'}">${i < 3 ? MEDALS[i] : i + 1}</span>
+      <span class="score-name" style="color:${p.name === myName ? 'var(--gold)' : 'var(--muted)'};font-weight:${p.name === myName ? 700 : 400}">${p.name}</span>
+      <span class="score-pts">${p.score}</span>
+    </div>
+  `).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//   RENDER — RESULTS
+// ═══════════════════════════════════════════════════════
+function renderResults() {
+  const s = sorted(game?.players || []);
+  const top3 = s.slice(0, 3).map((p, i) => `
+    <div class="podium-card ${i === 0 ? 'first' : ''}">
+      <span class="podium-medal">${MEDALS[i]}</span>
+      <span class="podium-name">${p.name}</span>
+      <span class="podium-score">${p.score}</span>
+    </div>
+  `).join('');
+
+  const rest = s.slice(3).map((p, i) => `
+    <div class="score-row">
+      <span class="score-rank">${i + 4}</span>
+      <span class="score-name" style="color:var(--muted)">${p.name}</span>
+      <span class="score-pts">${p.score}</span>
+    </div>
+  `).join('');
+
+  document.getElementById('results-list').innerHTML = top3 + (rest ? `<div style="margin-top:12px">${rest}</div>` : '');
+
+  if (role === 'host') {
+    document.getElementById('new-game-btn').style.display = 'block';
+  }
+}
+</script>
+</body>
+</html>
