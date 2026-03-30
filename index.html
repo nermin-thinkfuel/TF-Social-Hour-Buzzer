@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Social Hour Buzzer 🔔</title>
+<title>ThinkFuel Social Hour Buzzer</title>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;600;800&display=swap" rel="stylesheet">
@@ -11,19 +11,19 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg: #080c14;
-    --surface: #0f1623;
-    --surface2: #161e2e;
-    --border: rgba(255,255,255,0.08);
-    --border2: rgba(255,255,255,0.14);
-    --gold: #f5b932;
-    --gold-dim: rgba(245,185,50,0.12);
-    --gold-border: rgba(245,185,50,0.3);
+    --bg: #060a12;
+    --surface: #0c1220;
+    --surface2: #111928;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --gold: #ff6b2b;
+    --gold-dim: rgba(255,107,43,0.12);
+    --gold-border: rgba(255,107,43,0.3);
     --red: #e63946;
     --red-glow: rgba(230,57,70,0.5);
-    --green: #2ec4b6;
-    --text: #e8edf5;
-    --muted: #6b7a96;
+    --green: #00c2a8;
+    --text: #eaf0f9;
+    --muted: #5e718a;
     --mono: 'Space Mono', monospace;
     --sans: 'DM Sans', sans-serif;
   }
@@ -47,8 +47,8 @@
     content: '';
     position: fixed; inset: 0;
     background:
-      radial-gradient(ellipse 60% 40% at 20% 20%, rgba(245,185,50,0.04) 0%, transparent 60%),
-      radial-gradient(ellipse 50% 40% at 80% 80%, rgba(46,196,182,0.04) 0%, transparent 60%);
+      radial-gradient(ellipse 60% 40% at 20% 20%, rgba(255,107,43,0.05) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 80% 80%, rgba(0,194,168,0.04) 0%, transparent 60%);
     pointer-events: none;
   }
 
@@ -259,8 +259,8 @@
   }
 
   @keyframes pulse-red {
-    0%, 100% { box-shadow: 0 0 0 8px rgba(230,57,70,0.15), 0 0 40px rgba(230,57,70,0.45); }
-    50% { box-shadow: 0 0 0 14px rgba(230,57,70,0.08), 0 0 60px rgba(230,57,70,0.6); }
+    0%, 100% { box-shadow: 0 0 0 8px rgba(230,57,70,0.2), 0 0 50px rgba(230,57,70,0.5); }
+    50% { box-shadow: 0 0 0 16px rgba(230,57,70,0.08), 0 0 70px rgba(230,57,70,0.65); }
   }
 
   /* ───── PLAYER SCOREBOARD ───── */
@@ -339,9 +339,9 @@
 <!-- ═══════════════════════════════════ -->
 <div class="screen active" id="screen-setup">
   <div class="card">
-    <span class="icon-hero">🔔</span>
-    <h1 class="title">Social Hour Buzzer</h1>
-    <p class="subtitle" style="margin-bottom:28px">Real-time quiz buzzer for your team</p>
+    <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:6px"><span style="font-size:28px">🔥</span><span style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--gold);letter-spacing:.05em">thinkfuel</span></div>
+    <h1 class="title" style="margin-bottom:4px">Social Hour Buzzer</h1>
+    <p class="subtitle" style="margin-bottom:28px">Real-time quiz game for your team</p>
 
     <div id="setup-error" class="error-box"></div>
 
@@ -369,6 +369,7 @@
   <div class="card card-wide">
     <div class="host-header">
       <div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--gold);letter-spacing:.1em;margin-bottom:4px">🔥 thinkfuel</div>
         <div class="q-label">Question</div>
         <div class="q-counter" id="host-q-counter">1 / 10</div>
       </div>
@@ -596,6 +597,18 @@ function markWrong() {
     buzzedBy: null
   };
   publish(game);
+  renderHostStatus();
+}
+
+function skipQuestion() {
+  if (game.currentQ >= game.totalQ) { endGame(); return; }
+  game = {
+    ...game, phase: 'lobby',
+    currentQ: game.currentQ + 1,
+    buzzedBy: null, disqualified: [], lastWinner: null
+  };
+  publish(game);
+  document.getElementById('host-q-counter').textContent = `${game.currentQ} / ${game.totalQ}`;
   renderHostStatus();
 }
 
